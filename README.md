@@ -13,7 +13,7 @@ Just as a refresher, we would like you to:
 You have most likely downloaded the assignment elsewhere and already made modifications. In that case, make sure that you are cloning the repository in a different location so that you don't lose your changes.
 
 When your fork has been set up, simply copy your `kernels.c` file into your fork's folder.
-E.g. if you have your old perflab folder in `perflab` and you've cloned to the same directory (and thereby created a new folder `23-prflab`) then you can copy the file using the following command (on 
+E.g. if you have your old perflab folder in `prflab` and you've cloned to the same directory (and thereby created a new folder `23-prflab`) then you can copy the file using the following command (on 
 linux):
 
 ```
