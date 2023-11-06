@@ -32,15 +32,14 @@
 #define S8192  133.1
 
 #elif defined(__O2__)
-            
-#define B64    14.5
-#define B128   14.3
-#define B256   14.2
-#define B512   14.2
-#define B1024  14.4
-#define B2048  14.8
-#define B4096  14.9
-#define B8192  15.0
+#define B64    13.1
+#define B128   12.8
+#define B256   12.7
+#define B512   12.7
+#define B1024  12.9
+#define B2048  13.2
+#define B4096  13.3
+#define B8192  13.3
 #define R64    3.0
 #define R128   8.4
 #define R256   11.1
@@ -59,15 +58,14 @@
 #define S8192  70.3
 
 #elif defined(__O3__)
-            
-#define B64    14.5
-#define B128   14.3
-#define B256   14.2
-#define B512   14.4
-#define B1024  14.4
-#define B2048  14.8
-#define B4096  15.0
-#define B8192  14.9
+#define B64    13.0
+#define B128   12.8
+#define B256   12.7
+#define B512   12.7
+#define B1024  12.8
+#define B2048  13.4
+#define B4096  13.3
+#define B8192  13.4
 #define R64    3.2
 #define R128   8.5
 #define R256   10.8
@@ -86,14 +84,14 @@
 #define S8192  92.5
 
 #else // O0 assumed
-#define B64    35.3
-#define B128   35.0
-#define B256   35.1
-#define B512   35.0
-#define B1024  35.4
-#define B2048  35.6
-#define B4096  35.6
-#define B8192  35.7
+#define B64    42.7
+#define B128   42.5
+#define B256   42.4
+#define B512   42.6
+#define B1024  44.1
+#define B2048  43.4
+#define B4096  43.7
+#define B8192  43.6
 #define R64    9.4
 #define R128   17.5
 #define R256   46.1
