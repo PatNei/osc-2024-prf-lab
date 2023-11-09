@@ -260,7 +260,7 @@ char rotate_descr_6[] = "rotate: 6 (accumulator)";
 char rotate_descr_7[] = "rotate: 7 (loop unrolling)";
 char rotate_descr_8[] = "rotate: 8 (loop unrolling and accumulator)";
 char rotate_descr_9[] = "rotate: 9 (maximized loop unrolling)";
-char rotate_descr_10[] = "rotate: 10 (cache blocking)";
+char rotate_descr_10[] = "rotate: 10 (extreme loop unrolling)";
 void register_rotate_functions()
 {
     // add_rotate_function(&naive_rotate, rotate_descr_1);
