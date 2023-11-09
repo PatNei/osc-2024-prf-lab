@@ -94,6 +94,7 @@ void naive_5_rotate(int dim, pixel *src, pixel *dst)
             acc[dim3 + i] = src[RIDX(i, j, dim)];
         }
     }
+    memcpy(dst, acc, sizeof(pixel) * dim * dim);
 }
 void naive_6_rotate(int dim, pixel *src, pixel *dst)
 {
@@ -172,7 +173,7 @@ void naive_9_rotate(int dim, pixel *src, pixel *dst)
     for (j = 0; j < dim; j++)
     {
         dim3 = (dim2 - j) * dim;
-        for (i = 0; i < dim; i = i + 8)
+        for (i = 0; i < dim; i = i + 16)
         {
             dim4 = dim3 + i;
             dst[dim4] = src[RIDX(i, j, dim)];
@@ -183,6 +184,54 @@ void naive_9_rotate(int dim, pixel *src, pixel *dst)
             dst[dim4 + 5] = src[RIDX(5 + i, j, dim)];
             dst[dim4 + 6] = src[RIDX(6 + i, j, dim)];
             dst[dim4 + 7] = src[RIDX(7 + i, j, dim)];
+            dst[dim4 + 8] = src[RIDX(8 + i, j, dim)];
+            dst[dim4 + 9] = src[RIDX(9 + i, j, dim)];
+            dst[dim4 + 10] = src[RIDX(10 + i, j, dim)];
+            dst[dim4 + 11] = src[RIDX(11 + i, j, dim)];
+            dst[dim4 + 12] = src[RIDX(12 + i, j, dim)];
+            dst[dim4 + 13] = src[RIDX(13 + i, j, dim)];
+            dst[dim4 + 14] = src[RIDX(14 + i, j, dim)];
+            dst[dim4 + 15] = src[RIDX(15 + i, j, dim)];
+        }
+    }
+    for (; j < dim; j++)
+    {
+        dim3 = (dim2 - j) * dim;
+        for (; i < dim; i++)
+        {
+            dim4 = dim3 + i;
+            dst[dim4] = src[RIDX(i, j, dim)];
+        }
+    }
+}
+void naive_10_rotate(int dim, pixel *src, pixel *dst)
+{
+    int i, j, k, dim2, dim3;
+    dim2 = dim - 1;
+    for (j = 0; j < dim; j += 8)
+    {
+        for (i = 0; i < dim; i += 16)
+        {
+            for (k = j; k < (j + 8); k++)
+            {
+                dim3 = (dim2 - k) * dim + i;
+                dst[dim3] = src[RIDX(i, k, dim)];
+                dst[dim3 + 1] = src[RIDX(1 + i, k, dim)];
+                dst[dim3 + 2] = src[RIDX(2 + i, k, dim)];
+                dst[dim3 + 3] = src[RIDX(3 + i, k, dim)];
+                dst[dim3 + 4] = src[RIDX(4 + i, k, dim)];
+                dst[dim3 + 5] = src[RIDX(5 + i, k, dim)];
+                dst[dim3 + 6] = src[RIDX(6 + i, k, dim)];
+                dst[dim3 + 7] = src[RIDX(7 + i, k, dim)];
+                dst[dim3 + 8] = src[RIDX(8 + i, k, dim)];
+                dst[dim3 + 9] = src[RIDX(9 + i, k, dim)];
+                dst[dim3 + 10] = src[RIDX(10 + i, k, dim)];
+                dst[dim3 + 11] = src[RIDX(11 + i, k, dim)];
+                dst[dim3 + 12] = src[RIDX(12 + i, k, dim)];
+                dst[dim3 + 13] = src[RIDX(13 + i, k, dim)];
+                dst[dim3 + 14] = src[RIDX(14 + i, k, dim)];
+                dst[dim3 + 15] = src[RIDX(15 + i, k, dim)];
+            }
         }
     }
 }
@@ -210,18 +259,20 @@ char rotate_descr_5[] = "rotate: 5 (accumulator bad)";
 char rotate_descr_6[] = "rotate: 6 (accumulator)";
 char rotate_descr_7[] = "rotate: 7 (loop unrolling)";
 char rotate_descr_8[] = "rotate: 8 (loop unrolling and accumulator)";
-char rotate_descr_9[] = "rotate: 9 ()";
+char rotate_descr_9[] = "rotate: 9 (maximized loop unrolling)";
+char rotate_descr_10[] = "rotate: 10 (cache blocking)";
 void register_rotate_functions()
 {
-    add_rotate_function(&naive_rotate, rotate_descr_1);
-    add_rotate_function(&naive_2_rotate, rotate_descr_2);
-    add_rotate_function(&naive_3_rotate, rotate_descr_3);
-    add_rotate_function(&naive_4_rotate, rotate_descr_4);
-    add_rotate_function(&naive_5_rotate, rotate_descr_5);
-    add_rotate_function(&naive_6_rotate, rotate_descr_6);
-    add_rotate_function(&naive_7_rotate, rotate_descr_7);
-    add_rotate_function(&naive_8_rotate, rotate_descr_8);
+    // add_rotate_function(&naive_rotate, rotate_descr_1);
+    // add_rotate_function(&naive_2_rotate, rotate_descr_2);
+    // add_rotate_function(&naive_3_rotate, rotate_descr_3);
+    // add_rotate_function(&naive_4_rotate, rotate_descr_4);
+    // add_rotate_function(&naive_5_rotate, rotate_descr_5);
+    // add_rotate_function(&naive_6_rotate, rotate_descr_6);
+    // add_rotate_function(&naive_7_rotate, rotate_descr_7);
+    // add_rotate_function(&naive_8_rotate, rotate_descr_8);
     add_rotate_function(&naive_9_rotate, rotate_descr_9);
+    add_rotate_function(&naive_10_rotate, rotate_descr_10);
     /* ... Register additional test functions here */
 }
 
