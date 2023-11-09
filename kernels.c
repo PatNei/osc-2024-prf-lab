@@ -243,7 +243,7 @@ void naive_10_rotate(int dim, pixel *src, pixel *dst)
 
 void rotate(int dim, pixel *src, pixel *dst)
 {
-    naive_rotate(dim, src, dst);
+    naive_10_rotate(dim, src, dst);
 }
 
 /*
