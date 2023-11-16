@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include "defs.h"
 #include "smooth.h" // helper functions for naive_smooth
@@ -280,8 +281,58 @@ void register_rotate_functions()
  * ROTATE_T KERNEL
  *****************************************************************************/
 
+typedef struct
+{
+    int dim;
+    int jmin;
+    int jmax;
+    pixel *src;
+    pixel *dst;
+} threadArgs;
+
 // Your different versions of the rotate_t kernel go here
 // (i.e. rotate with multi-threading)
+
+void *rotate_t_helper(void *arg)
+{
+    int i, j, k, dim, dim2, dim3, jmin, jmax;
+    threadArgs *args = arg;
+    pixel *dst, *src;
+    dst = args->dst;
+    src = args->src;
+    dim = args->dim;
+    jmin = args->jmin;
+    jmax = args->jmax;
+    dim2 = args->dim - 1;
+    for (j = jmin; j < jmax; j += 8)
+    {
+        for (i = 0; i < dim; i += 16)
+        {
+            for (k = j; k < (j + 8); k++)
+            {
+                dim3 = (dim2 - k) * dim + i;
+                dst[dim3] = src[RIDX(i, k, dim)];
+                dst[dim3 + 1] = src[RIDX(1 + i, k, dim)];
+                dst[dim3 + 2] = src[RIDX(2 + i, k, dim)];
+                dst[dim3 + 3] = src[RIDX(3 + i, k, dim)];
+                dst[dim3 + 4] = src[RIDX(4 + i, k, dim)];
+                dst[dim3 + 5] = src[RIDX(5 + i, k, dim)];
+                dst[dim3 + 6] = src[RIDX(6 + i, k, dim)];
+                dst[dim3 + 7] = src[RIDX(7 + i, k, dim)];
+                dst[dim3 + 8] = src[RIDX(8 + i, k, dim)];
+                dst[dim3 + 9] = src[RIDX(9 + i, k, dim)];
+                dst[dim3 + 10] = src[RIDX(10 + i, k, dim)];
+                dst[dim3 + 11] = src[RIDX(11 + i, k, dim)];
+                dst[dim3 + 12] = src[RIDX(12 + i, k, dim)];
+                dst[dim3 + 13] = src[RIDX(13 + i, k, dim)];
+                dst[dim3 + 14] = src[RIDX(14 + i, k, dim)];
+                dst[dim3 + 15] = src[RIDX(15 + i, k, dim)];
+            }
+        }
+    }
+    free(args);
+    return NULL;
+}
 
 /*
  * rotate_t - Your current working version of rotate_t
@@ -291,6 +342,35 @@ char rotate_t_descr[] = "rotate_t: Current working version";
 void rotate_t(int dim, pixel *src, pixel *dst)
 {
     naive_rotate(dim, src, dst);
+}
+
+char rotate_t_descr_my[] = "Multi threaded for every value over 256";
+void rotate_t_my(int dim, pixel *src, pixel *dst)
+{
+    if (dim <= 256)
+    {
+        rotate(dim, src, dst);
+        return;
+    }
+    int i, max, dimSplit;
+    max = 32;
+    dimSplit = dim / max;
+    pthread_t tid[max]; // Void pointers
+    // should split the workload into the pieces for jmin and jmax
+    for (i = 0; i < max; i++) // should divide the dim into equal pieces
+    {
+        threadArgs *args = malloc(sizeof(threadArgs));
+        args->dim = dim;
+        args->dst = dst;
+        args->jmin = dimSplit * i;
+        args->jmax = args->jmin + dimSplit;
+        args->src = src;
+        pthread_create(&tid[i], NULL, rotate_t_helper, args);
+    }
+    for (i = 0; i < max; i++)
+    {
+        pthread_join(tid[i], NULL);
+    }
 }
 
 /*********************************************************************
@@ -304,6 +384,7 @@ void rotate_t(int dim, pixel *src, pixel *dst)
 void register_rotate_t_functions()
 {
     add_rotate_t_function(&rotate_t, rotate_t_descr);
+    add_rotate_t_function(&rotate_t_my, rotate_t_descr_my);
     /* ... Register additional test functions here */
 }
 
