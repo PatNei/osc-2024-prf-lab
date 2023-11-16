@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <string.h>
 #include <pthread.h>
+#include <immintrin.h>
 #include <stdlib.h>
 #include "defs.h"
 #include "smooth.h" // helper functions for naive_smooth
@@ -403,25 +404,6 @@ void naive_blend(int dim, pixel *src, pixel *dst) // reads global variable `pixe
     for (i = 0; i < dim; i++)
         for (j = 0; j < dim; j++)
             blend_pixel(&src[RIDX(i, j, dim)], &dst[RIDX(i, j, dim)], &bgc); // `blend_pixel` defined in blend.c
-}
-
-void blend_pixel_2(pixel *s, pixel *d, pixel *b)
-{
-    float a, a_1;
-    unsigned short sred, sgreen, sblue, bred, bgreen, bblue;
-    a = ((float)(s->alpha)) / USHRT_MAX;
-    a_1 = 1 - a;
-    sred = s->red * a;
-    sgreen = s->green * a;
-    sblue = s->blue * a;
-    bred = b->red * a_1;
-    bgreen = b->green * a_1;
-    bblue = b->blue * a_1;
-
-    d->red = sred + bred;
-    d->green = sgreen + bgreen;
-    d->blue = sblue + bblue;
-    d->alpha = USHRT_MAX; // opaque
 }
 
 char blend_descr_my[] = "blend: removed procedure call and added code motion where applicaple ";
