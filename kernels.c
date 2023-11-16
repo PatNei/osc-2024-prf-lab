@@ -5,6 +5,7 @@
  ********************************************************/
 
 #include <stdio.h>
+#include <limits.h>
 #include <string.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -334,16 +335,6 @@ void *rotate_t_helper(void *arg)
     return NULL;
 }
 
-/*
- * rotate_t - Your current working version of rotate_t
- * IMPORTANT: This is the version you will be graded on
- */
-char rotate_t_descr[] = "rotate_t: Current working version";
-void rotate_t(int dim, pixel *src, pixel *dst)
-{
-    naive_rotate(dim, src, dst);
-}
-
 char rotate_t_descr_my[] = "Multi threaded for every value over 256";
 void rotate_t_my(int dim, pixel *src, pixel *dst)
 {
@@ -371,6 +362,16 @@ void rotate_t_my(int dim, pixel *src, pixel *dst)
     {
         pthread_join(tid[i], NULL);
     }
+}
+
+/*
+ * rotate_t - Your current working version of rotate_t
+ * IMPORTANT: This is the version you will be graded on
+ */
+char rotate_t_descr[] = "rotate_t: Current working version";
+void rotate_t(int dim, pixel *src, pixel *dst)
+{
+    rotate_t_my(dim, src, dst);
 }
 
 /*********************************************************************
@@ -404,10 +405,46 @@ void naive_blend(int dim, pixel *src, pixel *dst) // reads global variable `pixe
             blend_pixel(&src[RIDX(i, j, dim)], &dst[RIDX(i, j, dim)], &bgc); // `blend_pixel` defined in blend.c
 }
 
+void blend_pixel_2(pixel *s, pixel *d, pixel *b)
+{
+    float a, a_1;
+    unsigned short sred, sgreen, sblue, bred, bgreen, bblue;
+    a = ((float)(s->alpha)) / USHRT_MAX;
+    a_1 = 1 - a;
+    sred = s->red * a;
+    sgreen = s->green * a;
+    sblue = s->blue * a;
+    bred = b->red * a_1;
+    bgreen = b->green * a_1;
+    bblue = b->blue * a_1;
+
+    d->red = sred + bred;
+    d->green = sgreen + bgreen;
+    d->blue = sblue + bblue;
+    d->alpha = USHRT_MAX; // opaque
+}
+
+char blend_descr_my[] = "blend: removed procedure call and added code motion where applicaple ";
+void blend_my(int dim, pixel *src, pixel *dst)
+{
+    float a, a1;
+    int i, dummy;
+    dummy = dim * dim;
+
+    for (i = 0; i < dummy; i++)
+    {
+        a = ((float)(src[i].alpha)) / USHRT_MAX;
+        a1 = 1 - a;
+        dst[i].red = (a * src[i].red) + (a1 * bgc.red);
+        dst[i].green = (a * src[i].green) + (a1 * bgc.green);
+        dst[i].blue = (a * src[i].blue) + (a1 * bgc.blue);
+        dst[i].alpha = USHRT_MAX; // opaques
+    }
+}
 char blend_descr[] = "blend: Current working version";
 void blend(int dim, pixel *src, pixel *dst)
 {
-    naive_blend(dim, src, dst);
+    blend_my(dim, src, dst);
 }
 
 /*
@@ -418,6 +455,7 @@ void blend(int dim, pixel *src, pixel *dst)
 void register_blend_functions()
 {
     add_blend_function(&blend, blend_descr);
+    add_blend_function(&blend_my, blend_descr_my);
     /* ... Register additional test functions here */
 }
 
