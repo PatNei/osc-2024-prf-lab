@@ -3,8 +3,6 @@
  * Acknowledgment: This lab is an extended version of the
  * CS:APP Performance Lab
  ********************************************************/
-#pragma GCC target("avx2")
-
 #include <stdio.h>
 #include <limits.h>
 #include <string.h>
@@ -445,11 +443,6 @@ void register_blend_functions()
 /******************************************************************************
  * BLEND_V KERNEL
  *****************************************************************************/
-char blend_v_descr[] = "blend_v: Current working version";
-void blend_v(int dim, pixel *src, pixel *dst)
-{
-    naive_blend(dim, src, dst);
-}
 
 void print_pix(__m256i *pix)
 {
@@ -497,7 +490,9 @@ void print_float(char *mess, __m256 flt8)
 #define multiplyVectors_float _mm256_mul_ps
 #define subtractVectors_float _mm256_sub_ps
 #define addVectors_float _mm256_add_ps
-#define orderValuesBy_float _mm256_permutevar8x32_ps
+#define orderValuesBy_float _mm256_permutevar8x32_ps // Not as fast as shuffle
+#define orderShuffle _MM_SHUFFLE
+#define orderValuesBy_shuff_float(a, b, c) _mm256_shuffle_ps(a, b, ((int)c)) // Way faster than using permute
 #define combineTwoFloatVectorstoIntegerVector _mm256_packus_epi32
 #define convertFVectorToIVector _mm256_cvtps_epi32
 
@@ -512,7 +507,7 @@ void blend_v_dev(int dim, pixel *src, pixel *dst)
     const m256 uShortMAX = createVectorAs_float(USHRT_MAX);       // Vector for USHRT_MAX
     const m256i zeroes = createVectorAsZero_integer();            // Vector with zeroes
     const m256 combineWithAlphaMask = createMask_float(0, 0, 0, -1, 0, 0, 0, -1);
-    const m256i orderPattern = createVectorWith_integer(7, 7, 7, 7, 3, 3, 3, 3);
+    // const m256i orderPattern = createVectorWith_integer(7, 7, 7, 7, 3, 3, 3, 3);
     for (i = 0; i < dummy; i += 4, src += 4, dst += 4)
     {
         // [p1_r,p1_g,p1_b,p1_a,p2_r,p1_g,p1_b,p1_a,p3_r,p3_g,p3_b,p3_a,p4_r,p4_g,p4_b,p4_a]
@@ -542,8 +537,12 @@ void blend_v_dev(int dim, pixel *src, pixel *dst)
         // print_float("calculate a hi", multiplyVectors_float(hiPixF, ushrt_max));
         // print_float("replicate Alpha low", orderValuesBy_float(loPixF, orderPattern(7, 7, 7, 7, 3, 3, 3, 3)));
         // print_float("replicate Alpha High", orderValuesBy_float(hiPixF, orderPattern(7, 7, 7, 7, 3, 3, 3, 3)));
-        m256 alpha_low = orderValuesBy_float(multiplyVectors_float(loPixF, ushrt_max), orderPattern);
-        m256 alpha_high = orderValuesBy_float(multiplyVectors_float(hiPixF, ushrt_max), orderPattern);
+        m256 a_low = multiplyVectors_float(loPixF, ushrt_max);
+        m256 a_high = multiplyVectors_float(hiPixF, ushrt_max);
+        m256 alpha_vec_low = orderValuesBy_shuff_float(a_low, a_low, orderShuffle(3, 3, 7, 7));
+        m256 alpha_vec_high = orderValuesBy_shuff_float(a_high, a_high, orderShuffle(3, 3, 7, 7));
+        m256 alphaTimesColor_lo = multiplyVectors_float(alpha_vec_low, loPixF);
+        m256 alphaTimesColor_hi = multiplyVectors_float(alpha_vec_high, hiPixF);
         // print_float("copy Alpha low with calculation", alpha_low);
         // print_float("copy Alpha High with calculation", alpha_high);
         //  need to fill a vector with alpha values
@@ -560,8 +559,8 @@ void blend_v_dev(int dim, pixel *src, pixel *dst)
           1 - a
       ]
       */
-        m256 oneminusa_lo = subtractVectors_float(oneVector, alpha_low);
-        m256 oneminusa_hi = subtractVectors_float(oneVector, alpha_high);
+        m256 oneminusa_lo = subtractVectors_float(oneVector, alpha_vec_low);
+        m256 oneminusa_hi = subtractVectors_float(oneVector, alpha_vec_high);
         // print_float("oneminusa lo", oneminusa_lo);
         // print_float("oneminusa hi", oneminusa_hi);
 
@@ -578,8 +577,7 @@ void blend_v_dev(int dim, pixel *src, pixel *dst)
             a * p2_a
         ]
         */
-        m256 alphaTimesColor_lo = multiplyVectors_float(alpha_low, loPixF);
-        m256 alphaTimesColor_hi = multiplyVectors_float(alpha_high, hiPixF);
+
         // print_float("alphaTimesColor", alphaTimesColor_lo);
         // print_float("alphaTimesColor", alphaTimesColor_hi);
 
@@ -661,30 +659,29 @@ void blend_v_my(int dim, pixel *src, pixel *dst)
     const m256 uShortMAX = createVectorAs_float(USHRT_MAX);       // Vector for USHRT_MAX
     const m256i zeroes = createVectorAsZero_integer();            // Vector with zeroes
     const m256 combineWithAlphaMask = createMask_float(0, 0, 0, -1, 0, 0, 0, -1);
-    const m256i orderPattern = createVectorWith_integer(7, 7, 7, 7, 3, 3, 3, 3);
+    // const m256i orderPattern = createVectorWith_integer(7, 7, 7, 7, 3, 3, 3, 3);
     for (i = 0; i < dummy; i += 4, src += 4, dst += 4)
     {
         m256i pix4 = load4PixelToVector_integer(src);
 
+        // ordered like this for locality? No speed up tho.
         m256 loPixF = convertFrom256IntegerTo128BitFloatVector(splitVectorToFloat_lo(pix4, zeroes));
-        m256 hiPixF = convertFrom256IntegerTo128BitFloatVector(splitVectorToFloat_hi(pix4, zeroes));
-
-        m256 alpha_low = orderValuesBy_float(multiplyVectors_float(loPixF, ushrt_max), orderPattern);
-        m256 alpha_high = orderValuesBy_float(multiplyVectors_float(hiPixF, ushrt_max), orderPattern);
-
-        m256 oneminusa_lo = subtractVectors_float(oneVector, alpha_low);
-        m256 oneminusa_hi = subtractVectors_float(oneVector, alpha_high);
-
-        m256 alphaTimesColor_lo = multiplyVectors_float(alpha_low, loPixF);
-        m256 alphaTimesColor_hi = multiplyVectors_float(alpha_high, hiPixF);
-
+        m256 a_low = multiplyVectors_float(loPixF, ushrt_max);
+        m256 alpha_vec_low = orderValuesBy_shuff_float(a_low, a_low, orderShuffle(3, 3, 7, 7));
+        m256 oneminusa_lo = subtractVectors_float(oneVector, alpha_vec_low);
+        m256 alphaTimesColor_lo = multiplyVectors_float(alpha_vec_low, loPixF);
         m256 oneMinusAlphaTimesColor_lo = multiplyVectors_float(oneminusa_lo, bgcV);
-        m256 oneMinusAlphaTimesColor_hi = multiplyVectors_float(oneminusa_hi, bgcV);
-
         m256 preDst_lo = addVectors_float(alphaTimesColor_lo, oneMinusAlphaTimesColor_lo);
-        m256 preDst_hi = addVectors_float(alphaTimesColor_hi, oneMinusAlphaTimesColor_hi);
-
         m256 preDstWithAlpha_lo = pickAndChooseFromVectors_float(preDst_lo, uShortMAX, combineWithAlphaMask);
+
+        // ordered like this for locality? No speed up tho.
+        m256 hiPixF = convertFrom256IntegerTo128BitFloatVector(splitVectorToFloat_hi(pix4, zeroes));
+        m256 a_high = multiplyVectors_float(hiPixF, ushrt_max);
+        m256 alpha_vec_high = orderValuesBy_shuff_float(a_high, a_high, orderShuffle(3, 3, 7, 7));
+        m256 oneminusa_hi = subtractVectors_float(oneVector, alpha_vec_high);
+        m256 alphaTimesColor_hi = multiplyVectors_float(alpha_vec_high, hiPixF);
+        m256 oneMinusAlphaTimesColor_hi = multiplyVectors_float(oneminusa_hi, bgcV);
+        m256 preDst_hi = addVectors_float(alphaTimesColor_hi, oneMinusAlphaTimesColor_hi);
         m256 preDstWithAlpha_hi = pickAndChooseFromVectors_float(preDst_hi, uShortMAX, combineWithAlphaMask);
 
         m256i result = combineTwoFloatVectorstoIntegerVector(convertFVectorToIVector(preDstWithAlpha_lo), convertFVectorToIVector(preDstWithAlpha_hi));
@@ -695,6 +692,11 @@ void blend_v_my(int dim, pixel *src, pixel *dst)
 // Your different versions of the blend_v kernel go here
 // (i.e. with vectorization, aka. SIMD).
 
+char blend_v_descr[] = "blend_v: Current working version";
+void blend_v(int dim, pixel *src, pixel *dst)
+{
+    blend_v_my(dim, src, dst);
+}
 /*
  * register_blend_v_functions - Register all of your different versions
  *     of the blend_v kernel with the driver by calling the
@@ -703,8 +705,8 @@ void blend_v_my(int dim, pixel *src, pixel *dst)
 void register_blend_v_functions()
 {
     add_blend_v_function(&blend_v, blend_v_descr);
-    add_blend_v_function(&blend_v_my, blend_v_descr_my);
     add_blend_v_function(&blend_v_dev, blend_v_descr_dev);
+    add_blend_v_function(&blend_v_my, blend_v_descr_my);
     /* ... Register additional test functions here */
 }
 

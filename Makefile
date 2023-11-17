@@ -2,7 +2,7 @@
 
 # Default compiler-optimization level is 0 (no optimizations).
 ifndef O
-	O = 2
+	O = 0
 endif
 
 # Optimization is made configurable in case you want to compare your
