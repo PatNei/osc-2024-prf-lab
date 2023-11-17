@@ -3,6 +3,7 @@
  * Acknowledgment: This lab is an extended version of the
  * CS:APP Performance Lab
  ********************************************************/
+#pragma GCC target("avx2")
 
 #include <stdio.h>
 #include <limits.h>
@@ -423,6 +424,7 @@ void blend_my(int dim, pixel *src, pixel *dst)
         dst[i].alpha = USHRT_MAX; // opaques
     }
 }
+
 char blend_descr[] = "blend: Current working version";
 void blend(int dim, pixel *src, pixel *dst)
 {
@@ -440,19 +442,258 @@ void register_blend_functions()
     add_blend_function(&blend_my, blend_descr_my);
     /* ... Register additional test functions here */
 }
-
 /******************************************************************************
  * BLEND_V KERNEL
  *****************************************************************************/
-
-// Your different versions of the blend_v kernel go here
-// (i.e. with vectorization, aka. SIMD).
-
 char blend_v_descr[] = "blend_v: Current working version";
 void blend_v(int dim, pixel *src, pixel *dst)
 {
     naive_blend(dim, src, dst);
 }
+
+void print_pix(__m256i *pix)
+{
+    unsigned short shorts[16];
+    memcpy(shorts, pix, sizeof(shorts)); // Copy the data that pix points to, not the address of pix
+    printf("loaded from src:\n");
+    for (int z = 0; z < 8; z++)
+    {
+        printf("%*d:%*d, ", 2, z, 5, shorts[z]);
+    }
+    printf("\n");
+    for (int z = 8; z < 16; z++)
+    {
+        printf("%*d:%*d, ", 2, z, 5, shorts[z]);
+    }
+    printf("\n");
+}
+
+void print_float(char *mess, __m256 flt8)
+{
+    float floats[8];
+    memcpy(floats, &flt8, sizeof(flt8));
+    printf("Message: %s\n", mess);
+    for (int z = 0; z < 8; z++)
+    {
+        printf("%*d:%f, ", 2, z, floats[z]);
+    }
+    printf("\n");
+}
+
+#define m256 __m256
+#define m256i __m256i
+#define createVectorAs_float _mm256_set1_ps
+#define createVectorWith_float _mm256_setr_ps // reverse because of little endian bs
+#define createVectorWith_integer _mm256_set_epi32
+#define createVectorAsZero_float _mm256_setzero_ps
+#define createVectorAsZero_integer _mm256_setzero_si256
+#define createMask_float _mm256_setr_ps
+#define pickAndChooseFromVectors_float _mm256_blendv_ps
+#define load4PixelToVector_integer(x) _mm256_load_si256((m256i *)x) // does implicit type casting to m256i
+#define storeVectorToPixel(x, j) _mm256_store_si256((m256i *)x, j)  // does implicit type casting to m256i
+#define convertFrom256IntegerTo128BitFloatVector _mm256_cvtepi32_ps
+#define splitVectorToFloat_lo _mm256_unpacklo_epi16
+#define splitVectorToFloat_hi _mm256_unpackhi_epi16
+#define multiplyVectors_float _mm256_mul_ps
+#define subtractVectors_float _mm256_sub_ps
+#define addVectors_float _mm256_add_ps
+#define orderValuesBy_float _mm256_permutevar8x32_ps
+#define combineTwoFloatVectorstoIntegerVector _mm256_packus_epi32
+#define convertFVectorToIVector _mm256_cvtps_epi32
+
+char blend_v_descr_dev[] = "blend_v: dev version";
+void blend_v_dev(int dim, pixel *src, pixel *dst)
+{
+    int i, dummy;
+    dummy = dim * dim;
+    const m256 bgcV = createVectorWith_float(bgc.red, bgc.green, bgc.blue, 0.0, bgc.red, bgc.green, bgc.blue, 0.0);
+    const m256 ushrt_max = createVectorAs_float(1.0 / USHRT_MAX); // Vector for 1 / USHORTMAX
+    const m256 oneVector = createVectorAs_float(1.0);             // Vector for 1
+    const m256 uShortMAX = createVectorAs_float(USHRT_MAX);       // Vector for USHRT_MAX
+    const m256i zeroes = createVectorAsZero_integer();            // Vector with zeroes
+    const m256 combineWithAlphaMask = createMask_float(0, 0, 0, -1, 0, 0, 0, -1);
+    const m256i orderPattern = createVectorWith_integer(7, 7, 7, 7, 3, 3, 3, 3);
+    for (i = 0; i < dummy; i += 4, src += 4, dst += 4)
+    {
+        // [p1_r,p1_g,p1_b,p1_a,p2_r,p1_g,p1_b,p1_a,p3_r,p3_g,p3_b,p3_a,p4_r,p4_g,p4_b,p4_a]
+        m256i pix4 = load4PixelToVector_integer(src);
+        // print_pix(&pix4);
+        // convert to float vector where x % 2 = 0 is equal to 0
+        // [p1_r,0,p1_g,0,p1_b,0,p1_a,0,p3_r,0,p3_g,0,p3_b,0,p3_a,0]
+        m256 loPixF = convertFrom256IntegerTo128BitFloatVector(splitVectorToFloat_lo(pix4, zeroes));
+        // [p2_r,0,p2_g,0,p2_b,0,p2_a,0,p4_r,0,p4_g,0,p4_b,0,p4_a,0]
+        m256 hiPixF = convertFrom256IntegerTo128BitFloatVector(splitVectorToFloat_hi(pix4, zeroes));
+        // print_float("Convert to float lo", loPixF);
+        // print_float("Convert to float hi", hiPixF);
+        // calculate alpha for vector
+        /* Example:
+        [
+            p1_a * 1 / USHRT_MAX,
+            p1_a * 1 / USHRT_MAX,
+            p1_a * 1 / USHRT_MAX,
+            p1_a * 1 / USHRT_MAX,
+            p3_a * 1 / USHRT_MAX,
+            p3_a * 1 / USHRT_MAX,
+            p3_a * 1 / USHRT_MAX,
+            p3_a * 1 / USHRT_MAX
+        ]
+        */
+        // print_float("calculate a low", multiplyVectors_float(loPixF, ushrt_max));
+        // print_float("calculate a hi", multiplyVectors_float(hiPixF, ushrt_max));
+        // print_float("replicate Alpha low", orderValuesBy_float(loPixF, orderPattern(7, 7, 7, 7, 3, 3, 3, 3)));
+        // print_float("replicate Alpha High", orderValuesBy_float(hiPixF, orderPattern(7, 7, 7, 7, 3, 3, 3, 3)));
+        m256 alpha_low = orderValuesBy_float(multiplyVectors_float(loPixF, ushrt_max), orderPattern);
+        m256 alpha_high = orderValuesBy_float(multiplyVectors_float(hiPixF, ushrt_max), orderPattern);
+        // print_float("copy Alpha low with calculation", alpha_low);
+        // print_float("copy Alpha High with calculation", alpha_high);
+        //  need to fill a vector with alpha values
+        //  calculate 1 minus alpha AKA a1
+        /*
+      [
+          1 - a,
+          1 - a,
+          1 - a,
+          1 - a,
+          1 - a,
+          1 - a,
+          1 - a,
+          1 - a
+      ]
+      */
+        m256 oneminusa_lo = subtractVectors_float(oneVector, alpha_low);
+        m256 oneminusa_hi = subtractVectors_float(oneVector, alpha_high);
+        // print_float("oneminusa lo", oneminusa_lo);
+        // print_float("oneminusa hi", oneminusa_hi);
+
+        // calculate alpha * color
+        /*
+        [
+            a * p1_r,
+            a * p1_g,
+            a * p1_b,
+            a * p1_a,
+            a * p2_r,
+            a * p2_g,
+            a * p2_b,
+            a * p2_a
+        ]
+        */
+        m256 alphaTimesColor_lo = multiplyVectors_float(alpha_low, loPixF);
+        m256 alphaTimesColor_hi = multiplyVectors_float(alpha_high, hiPixF);
+        // print_float("alphaTimesColor", alphaTimesColor_lo);
+        // print_float("alphaTimesColor", alphaTimesColor_hi);
+
+        /*
+        [
+            a1 * bgcV_r,
+            a1 * bgcV_g,
+            a1 * bgcV_b,
+            a1 * bgcV_a,
+            a1 * bgcV_r,
+            a1 * bgcV_g,
+            a1 * bgcV_b,
+            a1 * bgcV_a
+        ]
+        */
+        // calculate 1 minus alpha * bgc_color
+        m256 oneMinusAlphaTimesColor_lo = multiplyVectors_float(oneminusa_lo, bgcV);
+        m256 oneMinusAlphaTimesColor_hi = multiplyVectors_float(oneminusa_hi, bgcV);
+
+        // add oneminusAlphaTimesColor to AlphaTimesColor
+        /*
+            [
+                (a * p1_r) + (a1 * bgc.red),
+                (a * p1_g) + (a1 * bgc.green),
+                (a * p1_b) + (a1 * bgc.blue),
+                (a1 * p1_a) + (a1 * bgcV_b),
+                (a * p2_r) + (a1 * bgc.red),
+                (a * p2_g) + (a1 * bgc.green),
+                (a * p2_b) + (a1 * bgc.blue),
+                (a1 * p2_a) + (a1 * bgcV_b),
+            ]
+        */
+        m256 preDst_lo = addVectors_float(alphaTimesColor_lo, oneMinusAlphaTimesColor_lo);
+        m256 preDst_hi = addVectors_float(alphaTimesColor_hi, oneMinusAlphaTimesColor_hi);
+
+        // Find a way to get all values from USHORTMAX VECTOR
+        /*
+            [
+                (a * p1_r) + (a1 * bgc.red),
+                (a * p1_g) + (a1 * bgc.green),
+                (a * p1_b) + (a1 * bgc.blue),
+                uShortMAX),
+                (a * p2_r) + (a1 * bgc.red),
+                (a * p2_g) + (a1 * bgc.green),
+                (a * p2_b) + (a1 * bgc.blue),
+                uShortMAX,
+            ]
+        */
+        m256 preDstWithAlpha_lo = pickAndChooseFromVectors_float(preDst_lo, uShortMAX, combineWithAlphaMask);
+        m256 preDstWithAlpha_hi = pickAndChooseFromVectors_float(preDst_hi, uShortMAX, combineWithAlphaMask);
+
+        // convert two float vectors into integer vector
+        m256i result = combineTwoFloatVectorstoIntegerVector(convertFVectorToIVector(preDstWithAlpha_lo), convertFVectorToIVector(preDstWithAlpha_hi));
+        // printf("This is the result\n");
+        // void print_pix(__m256i * result);
+
+        // store whatever we did into the dist
+        storeVectorToPixel(dst, result);
+    }
+
+    /*
+        a = ((float)(src[i].alpha)) / USHRT_MAX;
+        a1 = 1 - a;
+        dst[i].red = (a * src[i].red) + (a1 * bgc.red);
+        dst[i].green = (a * src[i].green) + (a1 * bgc.green);
+        dst[i].blue = (a * src[i].blue) + (a1 * bgc.blue);
+        dst[i].alpha = USHRT_MAX; // opaques
+
+    */
+}
+char blend_v_descr_my[] = "blend_v: my working version";
+void blend_v_my(int dim, pixel *src, pixel *dst)
+{
+    int i, dummy;
+    dummy = dim * dim;
+    const m256 bgcV = createVectorWith_float(bgc.red, bgc.green, bgc.blue, 0.0, bgc.red, bgc.green, bgc.blue, 0.0);
+    const m256 ushrt_max = createVectorAs_float(1.0 / USHRT_MAX); // Vector for 1 / USHORTMAX
+    const m256 oneVector = createVectorAs_float(1.0);             // Vector for 1
+    const m256 uShortMAX = createVectorAs_float(USHRT_MAX);       // Vector for USHRT_MAX
+    const m256i zeroes = createVectorAsZero_integer();            // Vector with zeroes
+    const m256 combineWithAlphaMask = createMask_float(0, 0, 0, -1, 0, 0, 0, -1);
+    const m256i orderPattern = createVectorWith_integer(7, 7, 7, 7, 3, 3, 3, 3);
+    for (i = 0; i < dummy; i += 4, src += 4, dst += 4)
+    {
+        m256i pix4 = load4PixelToVector_integer(src);
+
+        m256 loPixF = convertFrom256IntegerTo128BitFloatVector(splitVectorToFloat_lo(pix4, zeroes));
+        m256 hiPixF = convertFrom256IntegerTo128BitFloatVector(splitVectorToFloat_hi(pix4, zeroes));
+
+        m256 alpha_low = orderValuesBy_float(multiplyVectors_float(loPixF, ushrt_max), orderPattern);
+        m256 alpha_high = orderValuesBy_float(multiplyVectors_float(hiPixF, ushrt_max), orderPattern);
+
+        m256 oneminusa_lo = subtractVectors_float(oneVector, alpha_low);
+        m256 oneminusa_hi = subtractVectors_float(oneVector, alpha_high);
+
+        m256 alphaTimesColor_lo = multiplyVectors_float(alpha_low, loPixF);
+        m256 alphaTimesColor_hi = multiplyVectors_float(alpha_high, hiPixF);
+
+        m256 oneMinusAlphaTimesColor_lo = multiplyVectors_float(oneminusa_lo, bgcV);
+        m256 oneMinusAlphaTimesColor_hi = multiplyVectors_float(oneminusa_hi, bgcV);
+
+        m256 preDst_lo = addVectors_float(alphaTimesColor_lo, oneMinusAlphaTimesColor_lo);
+        m256 preDst_hi = addVectors_float(alphaTimesColor_hi, oneMinusAlphaTimesColor_hi);
+
+        m256 preDstWithAlpha_lo = pickAndChooseFromVectors_float(preDst_lo, uShortMAX, combineWithAlphaMask);
+        m256 preDstWithAlpha_hi = pickAndChooseFromVectors_float(preDst_hi, uShortMAX, combineWithAlphaMask);
+
+        m256i result = combineTwoFloatVectorstoIntegerVector(convertFVectorToIVector(preDstWithAlpha_lo), convertFVectorToIVector(preDstWithAlpha_hi));
+
+        storeVectorToPixel(dst, result);
+    }
+}
+// Your different versions of the blend_v kernel go here
+// (i.e. with vectorization, aka. SIMD).
 
 /*
  * register_blend_v_functions - Register all of your different versions
@@ -462,6 +703,8 @@ void blend_v(int dim, pixel *src, pixel *dst)
 void register_blend_v_functions()
 {
     add_blend_v_function(&blend_v, blend_v_descr);
+    add_blend_v_function(&blend_v_my, blend_v_descr_my);
+    add_blend_v_function(&blend_v_dev, blend_v_descr_dev);
     /* ... Register additional test functions here */
 }
 
