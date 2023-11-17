@@ -492,8 +492,8 @@ void print_float(char *mess, __m256 flt8)
 #define addVectors_float _mm256_add_ps
 #define orderValuesBy_float _mm256_permutevar8x32_ps // Not as fast as shuffle
 #define orderShuffle _MM_SHUFFLE
-#define orderValuesBy_shuff_float(a, b, c) _mm256_shuffle_ps(a, b, ((int)c)) // Way faster than using permute
-#define combineTwoFloatVectorstoIntegerVector _mm256_packus_epi32
+#define orderValuesBy_shuff_float _mm256_shuffle_ps // Way faster than using permute
+#define combineTwoIVectorstoSingleIVector _mm256_packus_epi32
 #define convertFVectorToIVector _mm256_cvtps_epi32
 
 char blend_v_descr_dev[] = "blend_v: dev version";
@@ -630,7 +630,7 @@ void blend_v_dev(int dim, pixel *src, pixel *dst)
         m256 preDstWithAlpha_hi = pickAndChooseFromVectors_float(preDst_hi, uShortMAX, combineWithAlphaMask);
 
         // convert two float vectors into integer vector
-        m256i result = combineTwoFloatVectorstoIntegerVector(convertFVectorToIVector(preDstWithAlpha_lo), convertFVectorToIVector(preDstWithAlpha_hi));
+        m256i result = combineTwoIVectorstoSingleIVector(convertFVectorToIVector(preDstWithAlpha_lo), convertFVectorToIVector(preDstWithAlpha_hi));
         // printf("This is the result\n");
         // void print_pix(__m256i * result);
 
@@ -684,7 +684,7 @@ void blend_v_my(int dim, pixel *src, pixel *dst)
         m256 preDst_hi = addVectors_float(alphaTimesColor_hi, oneMinusAlphaTimesColor_hi);
         m256 preDstWithAlpha_hi = pickAndChooseFromVectors_float(preDst_hi, uShortMAX, combineWithAlphaMask);
 
-        m256i result = combineTwoFloatVectorstoIntegerVector(convertFVectorToIVector(preDstWithAlpha_lo), convertFVectorToIVector(preDstWithAlpha_hi));
+        m256i result = combineTwoIVectorstoSingleIVector(convertFVectorToIVector(preDstWithAlpha_lo), convertFVectorToIVector(preDstWithAlpha_hi));
 
         storeVectorToPixel(dst, result);
     }
